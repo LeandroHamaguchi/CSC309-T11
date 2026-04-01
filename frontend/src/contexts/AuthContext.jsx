@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState} from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext(null);
@@ -17,6 +17,8 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 export const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
+    const loginSeqRef = useRef(0);
+    const registerSeqRef = useRef(0);
 
     useEffect(() => {
         const token = localStorage.getItem("token");
@@ -67,6 +69,7 @@ export const AuthProvider = ({ children }) => {
      * @returns {string} - Upon failure, Returns an error message.
      */
     const login = async (username, password) => {
+        const seq = ++loginSeqRef.current;
         try {
             const res = await fetch(`${BACKEND_URL}/login`, {
                 method: "POST",
@@ -75,25 +78,37 @@ export const AuthProvider = ({ children }) => {
             });
 
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
+            if (seq !== loginSeqRef.current) {
+                return;
+            }
+
+            const token =
+                typeof data.token === "string" && data.token.length > 0
+                    ? data.token
+                    : null;
+            if (!res.ok || !token) {
                 return data.message || "Login failed";
             }
-            localStorage.setItem("token", data.token);
-
 
             const meRes = await fetch(`${BACKEND_URL}/user/me`, {
-                headers: { Authorization: `Bearer ${data.token}` },
+                headers: { Authorization: `Bearer ${token}` },
             });
 
             const meData = await meRes.json().catch(() => ({}));
+            if (seq !== loginSeqRef.current) {
+                return;
+            }
             if (!meRes.ok) {
-                localStorage.removeItem("token");
                 return meData.message || "Could not load profile";
             }
 
+            localStorage.setItem("token", token);
             setUser(meData.user);
             navigate("/profile");
         } catch {
+            if (seq !== loginSeqRef.current) {
+                return;
+            }
             return "Network error";
         }
     };
@@ -106,19 +121,27 @@ export const AuthProvider = ({ children }) => {
      * @returns {string} - Upon failure, returns an error message.
      */
     const register = async (userData) => {
+        const seq = ++registerSeqRef.current;
         try {
             const res = await fetch(`${BACKEND_URL}/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(userData),
             });
-            
+
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
+            if (seq !== registerSeqRef.current) {
+                return;
+            }
+
+            if (!res.ok || res.status !== 201) {
                 return data.message || "Registration failed";
             }
             navigate("/success");
         } catch {
+            if (seq !== registerSeqRef.current) {
+                return;
+            }
             return "Network error";
         }
     };

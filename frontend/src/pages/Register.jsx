@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 const Register = () => {
     const { register } = useAuth();
     const [error, setError] = useState("");
+    const [pending, setPending] = useState(false);
     const [data, setData] = useState({
         username: '',
         firstname: '',
@@ -17,10 +18,19 @@ const Register = () => {
         setData({ ...data, [name]: value });
     };
 
-    const handle_submit = (e) => {
+    const handle_submit = async (e) => {
         e.preventDefault();
-        register(data)
-        .then(message => setError(message));
+        if (pending) return;
+        setPending(true);
+        setError("");
+        try {
+            const message = await register(data);
+            if (typeof message === "string") {
+                setError(message);
+            }
+        } finally {
+            setPending(false);
+        }
     };
 
     return <>
@@ -67,7 +77,7 @@ const Register = () => {
                 required
             />
             <div className="btn-container">
-                <button type="submit">Register</button>
+                <button type="submit" disabled={pending}>Register</button>
             </div>
             <p className="error">{error}</p>
         </form>
