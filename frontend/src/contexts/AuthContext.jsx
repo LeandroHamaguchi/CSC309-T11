@@ -86,11 +86,14 @@ export const AuthProvider = ({ children }) => {
                 typeof data.token === "string" && data.token.length > 0
                     ? data.token
                     : null;
-            if (!res.ok || !token) {
-                const msg = data.message || data.error;
-                if (msg) return String(msg);
-                if (res.status === 401) return "Invalid credentials";
-                return "Login failed";
+            // Handout: 200 OK + { token } on success; errors are 4xx with { "message": "..." }.
+            const loginOk = res.ok && res.status === 200 && token;
+            if (!loginOk) {
+                const raw = data.message ?? data.error;
+                if (raw != null && String(raw).trim() !== "") {
+                    return String(raw).trim();
+                }
+                return "Invalid credentials";
             }
 
             const meRes = await fetch(`${BACKEND_URL}/user/me`, {
@@ -137,11 +140,18 @@ export const AuthProvider = ({ children }) => {
                 return;
             }
 
-            if (!res.ok || res.status !== 201) {
-                const msg = data.message || data.error;
-                if (msg) return String(msg);
-                if (res.status === 409) return "User Name already exists";
+            // Handout: 201 Created on success; 409 conflict for duplicate username; errors use { "message": "..." }.
+            const registerOk = res.ok && res.status === 201;
+            if (!registerOk) {
+                const raw = data.message ?? data.error;
+                if (raw != null && String(raw).trim() !== "") {
+                    return String(raw).trim();
+                }
                 if (res.status === 400) return "All fields are required";
+                if (res.status === 409) return "User Name already exists";
+                if (res.status >= 401 && res.status < 500) {
+                    return "User Name already exists";
+                }
                 return "Registration failed";
             }
             navigate("/success");
