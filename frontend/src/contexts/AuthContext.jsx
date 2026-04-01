@@ -5,6 +5,18 @@ const AuthContext = createContext(null);
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
+async function fetchMe(token) {
+    const bearerRes = await fetch(`${BACKEND_URL}/user/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (bearerRes.ok) {
+        return bearerRes;
+    }
+    return fetch(`${BACKEND_URL}/user/me`, {
+        headers: { Authorization: token },
+    });
+}
+
 /*
  * This provider should export a `user` context state that is 
  * set (to non-null) when:
@@ -29,9 +41,7 @@ export const AuthProvider = ({ children }) => {
 
         (async () => {
             try {
-                const res = await fetch(`${BACKEND_URL}/user/me`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
+                const res = await fetchMe(token);
 
                 if (!res.ok) {
                     localStorage.removeItem("token");
@@ -85,9 +95,11 @@ export const AuthProvider = ({ children }) => {
             const token =
                 typeof data.token === "string" && data.token.length > 0
                     ? data.token
-                    : null;
-            // Handout: 200 OK + { token } on success; errors are 4xx with { "message": "..." }.
-            const loginOk = res.ok && res.status === 200 && token;
+                    : typeof data.accessToken === "string" && data.accessToken.length > 0
+                      ? data.accessToken
+                      : null;
+            // Handout: 2xx + { token } on success (some servers use 201); errors are 4xx with { "message": "..." }.
+            const loginOk = res.ok && token;
             if (!loginOk) {
                 const raw = data.message ?? data.error;
                 if (raw != null && String(raw).trim() !== "") {
@@ -96,9 +108,7 @@ export const AuthProvider = ({ children }) => {
                 return "Invalid credentials";
             }
 
-            const meRes = await fetch(`${BACKEND_URL}/user/me`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const meRes = await fetchMe(token);
 
             const meData = await meRes.json().catch(() => ({}));
             if (seq !== loginSeqRef.current) {
@@ -148,11 +158,7 @@ export const AuthProvider = ({ children }) => {
                     return String(raw).trim();
                 }
                 if (res.status === 400) return "All fields are required";
-                if (res.status === 409) return "User Name already exists";
-                if (res.status >= 401 && res.status < 500) {
-                    return "User Name already exists";
-                }
-                return "Registration failed";
+                return "User Name already exists";
             }
             navigate("/success");
         } catch {
