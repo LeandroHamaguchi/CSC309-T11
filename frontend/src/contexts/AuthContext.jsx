@@ -87,7 +87,10 @@ export const AuthProvider = ({ children }) => {
                     ? data.token
                     : null;
             if (!res.ok || !token) {
-                return data.message || "Login failed";
+                const msg = data.message || data.error;
+                if (msg) return String(msg);
+                if (res.status === 401) return "Invalid credentials";
+                return "Login failed";
             }
 
             const meRes = await fetch(`${BACKEND_URL}/user/me`, {
@@ -135,7 +138,11 @@ export const AuthProvider = ({ children }) => {
             }
 
             if (!res.ok || res.status !== 201) {
-                return data.message || "Registration failed";
+                const msg = data.message || data.error;
+                if (msg) return String(msg);
+                if (res.status === 409) return "User Name already exists";
+                if (res.status === 400) return "All fields are required";
+                return "Registration failed";
             }
             navigate("/success");
         } catch {
