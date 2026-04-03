@@ -1,24 +1,20 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext(null);
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
-async function fetchMe(token) {
-    const bearerRes = await fetch(`${BACKEND_URL}/user/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (bearerRes.ok) {
-        return bearerRes;
+function readErrorMessage(data) {
+    const m = data?.message;
+    if (m != null && String(m).trim() !== "") {
+        return String(m).trim();
     }
-    return fetch(`${BACKEND_URL}/user/me`, {
-        headers: { Authorization: token },
-    });
+    return null;
 }
 
 /*
- * This provider should export a `user` context state that is 
+ * This provider should export a `user` context state that is
  * set (to non-null) when:
  *     1. a hard reload happens while a user is logged in.
  *     2. the user just logged in.
@@ -32,6 +28,7 @@ export const AuthProvider = ({ children }) => {
     const loginSeqRef = useRef(0);
     const registerSeqRef = useRef(0);
 
+    // Handout: if localStorage has a token, GET /user/me and set user; else null. Persists across hard reload.
     useEffect(() => {
         const token = localStorage.getItem("token");
         if (!token) {
@@ -41,7 +38,9 @@ export const AuthProvider = ({ children }) => {
 
         (async () => {
             try {
-                const res = await fetchMe(token);
+                const res = await fetch(`${BACKEND_URL}/user/me`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
 
                 if (!res.ok) {
                     localStorage.removeItem("token");
@@ -95,27 +94,32 @@ export const AuthProvider = ({ children }) => {
             const token =
                 typeof data.token === "string" && data.token.length > 0
                     ? data.token
-                    : typeof data.accessToken === "string" && data.accessToken.length > 0
-                      ? data.accessToken
-                      : null;
-            // Handout: 2xx + { token } on success (some servers use 201); errors are 4xx with { "message": "..." }.
-            const loginOk = res.ok && token;
-            if (!loginOk) {
-                const raw = data.message ?? data.error;
-                if (raw != null && String(raw).trim() !== "") {
-                    return String(raw).trim();
+                    : null;
+
+            const loginSucceeded =
+                res.ok &&
+                token &&
+                (res.status === 200 || res.status === 201);
+
+            if (!loginSucceeded) {
+                const msg = readErrorMessage(data);
+                if (msg) {
+                    return msg;
                 }
                 return "Invalid credentials";
             }
 
-            const meRes = await fetchMe(token);
+            const meRes = await fetch(`${BACKEND_URL}/user/me`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
 
             const meData = await meRes.json().catch(() => ({}));
             if (seq !== loginSeqRef.current) {
                 return;
             }
+
             if (!meRes.ok) {
-                return meData.message || "Could not load profile";
+                return readErrorMessage(meData) || "Could not load profile";
             }
 
             localStorage.setItem("token", token);
@@ -150,16 +154,28 @@ export const AuthProvider = ({ children }) => {
                 return;
             }
 
-            // Handout: 201 Created on success; 409 conflict for duplicate username; errors use { "message": "..." }.
-            const registerOk = res.ok && res.status === 201;
-            if (!registerOk) {
-                const raw = data.message ?? data.error;
-                if (raw != null && String(raw).trim() !== "") {
-                    return String(raw).trim();
+            // Handout: 201 Created; body includes "User registered successfully". Some hosts use 200 with the same body or an empty JSON body on success.
+            const msgOk = readErrorMessage(data);
+            const registerSucceeded =
+                res.ok &&
+                (res.status === 201 ||
+                    (res.status === 200 &&
+                        (msgOk === "User registered successfully" || msgOk === null)));
+
+            if (!registerSucceeded) {
+                const msg = readErrorMessage(data);
+                if (msg) {
+                    return msg;
                 }
-                if (res.status === 400) return "All fields are required";
-                return "User Name already exists";
+                if (res.status === 400) {
+                    return "All fields are required";
+                }
+                if (res.status === 409) {
+                    return "User Name already exists";
+                }
+                return "Registration failed";
             }
+
             navigate("/success");
         } catch {
             if (seq !== registerSeqRef.current) {
