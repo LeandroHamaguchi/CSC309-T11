@@ -1,17 +1,10 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext(null);
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
-function readErrorMessage(data) {
-    const m = data?.message;
-    if (m != null && String(m).trim() !== "") {
-        return String(m).trim();
-    }
-    return null;
-}
 
 /*
  * This provider should export a `user` context state that is
@@ -25,10 +18,7 @@ function readErrorMessage(data) {
 export const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
-    const loginSeqRef = useRef(0);
-    const registerSeqRef = useRef(0);
 
-    // Handout: if localStorage has a token, GET /user/me and set user; else null. Persists across hard reload.
     useEffect(() => {
         const token = localStorage.getItem("token");
         if (!token) {
@@ -87,48 +77,25 @@ export const AuthProvider = ({ children }) => {
             });
 
             const data = await res.json().catch(() => ({}));
-            if (seq !== loginSeqRef.current) {
-                return;
+
+            if (!res.ok) {
+                return data.message || "Invalid credentials";
             }
 
-            const token =
-                typeof data.token === "string" && data.token.length > 0
-                    ? data.token
-                    : null;
-
-            const loginSucceeded =
-                res.ok &&
-                token &&
-                (res.status === 200 || res.status === 201);
-
-            if (!loginSucceeded) {
-                const msg = readErrorMessage(data);
-                if (msg) {
-                    return msg;
-                }
-                return "Invalid credentials";
-            }
+            localStorage.setItem("token", data.token);
 
             const meRes = await fetch(`${BACKEND_URL}/user/me`, {
-                headers: { Authorization: `Bearer ${token}` },
+                headers: { Authorization: `Bearer ${data.token}` },
             });
 
-            const meData = await meRes.json().catch(() => ({}));
-            if (seq !== loginSeqRef.current) {
-                return;
-            }
-
             if (!meRes.ok) {
-                return readErrorMessage(meData) || "Could not load profile";
+                return "Could not load profile";
             }
 
-            localStorage.setItem("token", token);
+            const meData = await meRes.json();
             setUser(meData.user);
             navigate("/profile");
         } catch {
-            if (seq !== loginSeqRef.current) {
-                return;
-            }
             return "Network error";
         }
     };
@@ -150,37 +117,13 @@ export const AuthProvider = ({ children }) => {
             });
 
             const data = await res.json().catch(() => ({}));
-            if (seq !== registerSeqRef.current) {
-                return;
-            }
 
-            // Handout: 201 Created; body includes "User registered successfully". Some hosts use 200 with the same body or an empty JSON body on success.
-            const msgOk = readErrorMessage(data);
-            const registerSucceeded =
-                res.ok &&
-                (res.status === 201 ||
-                    (res.status === 200 &&
-                        (msgOk === "User registered successfully" || msgOk === null)));
-
-            if (!registerSucceeded) {
-                const msg = readErrorMessage(data);
-                if (msg) {
-                    return msg;
-                }
-                if (res.status === 400) {
-                    return "All fields are required";
-                }
-                if (res.status === 409) {
-                    return "User Name already exists";
-                }
-                return "Registration failed";
+            if (!res.ok) {
+                return data.message || "Registration failed";
             }
 
             navigate("/success");
         } catch {
-            if (seq !== registerSeqRef.current) {
-                return;
-            }
             return "Network error";
         }
     };
