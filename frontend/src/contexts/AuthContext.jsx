@@ -5,7 +5,6 @@ const AuthContext = createContext(null);
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
-
 /*
  * This provider should export a `user` context state that is
  * set (to non-null) when:
@@ -40,7 +39,6 @@ export const AuthProvider = ({ children }) => {
 
                 const data = await res.json();
                 setUser(data.user);
-
             } catch {
                 localStorage.removeItem("token");
                 setUser(null);
@@ -68,7 +66,7 @@ export const AuthProvider = ({ children }) => {
      * @returns {string} - Upon failure, Returns an error message.
      */
     const login = async (username, password) => {
-        const seq = ++loginSeqRef.current;
+
         try {
             const res = await fetch(`${BACKEND_URL}/login`, {
                 method: "POST",
@@ -108,7 +106,6 @@ export const AuthProvider = ({ children }) => {
      * @returns {string} - Upon failure, returns an error message.
      */
     const register = async (userData) => {
-        const seq = ++registerSeqRef.current;
         try {
             const res = await fetch(`${BACKEND_URL}/register`, {
                 method: "POST",
